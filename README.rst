@@ -100,7 +100,7 @@ For details of the method, please checkout our paper `Robust analysis of allele-
     :target: https://pypi.org/project/xclone
     :alt: PyPI
 
-.. |PyPiDownloads| image:: https://static.pepy.tech/personalized-badge/xclone?period=total&units=international_system
+.. |PyPiDownloads| image:: https://static.pepy.tech/badge/xclone
     :target: https://pepy.tech/project/xclone
     :alt: PyPiDownloads
 
