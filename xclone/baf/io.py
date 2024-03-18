@@ -8,7 +8,9 @@ from scipy import io
 from scipy import sparse
 
 
-def load_data(data_dir, file_prefix = "xcltk"):
+def load_xcltk_data(data_dir, cell_anno_fn, ref_cell_types):
+    file_prefix = "xcltk"
+
     samples = load_samples(os.path.join(data_dir, file_prefix + ".samples.tsv"))
     regions = load_regions(os.path.join(data_dir, file_prefix + ".region.tsv"))
     AD_mtx = load_matrix(os.path.join(data_dir, file_prefix + ".AD.mtx"))
@@ -24,20 +26,49 @@ def load_data(data_dir, file_prefix = "xcltk"):
     adata.layers["OTH"] = OTH_mtx
 
     adata = adata.transpose()      # cell x region
+
+    cell_anno = load_cell_anno(cell_anno_fn)
+    adata.obs = pd.merge(adata.obs, cell_anno, on = "cell", how = "left")
+    adata.obs.index = adata.obs.index.astype(str)      # otherwise, anndata will report error of integer index
+
+    if ref_cell_types is None:
+        raise ValueError
+    elif isinstance(ref_cell_types, list) or isinstance(ref_cell_types, tuple):
+        adata.uns["ref_cell_types"] = list(ref_cell_types)
+    else:
+        adata.uns["ref_cell_types"] = [ref_cell_types]
+
     return(adata)
 
 
-def save_data(adata, out_dir, file_prefix = "xcltk"):
+def save_xcltk_data(adata, out_dir):
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
+
+    file_prefix = "xcltk"
     
-    save_samples(adata.obs, 
+    save_samples(adata.obs[["cell"]],
         fn = os.path.join(out_dir, file_prefix + ".samples.tsv"))
     save_regions(adata.var, 
         fn = os.path.join(out_dir, file_prefix + ".region.tsv"))
-    save_matrix(adata.layers["AD"], os.path.join(out_dir, file_prefix + ".AD.mtx"))
-    save_matrix(adata.layers["DP"], os.path.join(out_dir, file_prefix + ".DP.mtx"))
-    save_matrix(adata.layers["OTH"], os.path.join(out_dir, file_prefix + ".OTH.mtx"))
+    save_matrix(adata.layers["AD"].transpose(), 
+        fn = os.path.join(out_dir, file_prefix + ".AD.mtx"))
+    save_matrix(adata.layers["DP"].transpose(), 
+        fn = os.path.join(out_dir, file_prefix + ".DP.mtx"))
+    save_matrix(adata.layers["OTH"].transpose(), 
+        fn = os.path.join(out_dir, file_prefix + ".OTH.mtx"))
+    save_cell_anno(adata.obs[["cell", "cell_type"]], 
+        fn = os.path.join(out_dir, file_prefix + ".cell_anno_2column.tsv"))
+
+
+def load_cell_anno(fn):
+    df = pd.read_csv(fn, header = None, sep = "\t")
+    df.columns = ["cell", "cell_type"]
+    return(df)
+
+
+def save_cell_anno(df, fn):
+    df.to_csv(fn, sep = "\t", header = False, index = False)
 
 
 def load_matrix(fn):
