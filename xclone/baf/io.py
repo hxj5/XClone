@@ -7,6 +7,8 @@ import scipy as sp
 from scipy import io
 from scipy import sparse
 
+from ..blib.region import format_chrom
+
 
 def load_xcltk_data(data_dir, cell_anno_fn, ref_cell_types):
     file_prefix = "xcltk"
@@ -89,6 +91,7 @@ def save_matrix(mtx, fn):
 def load_regions(fn):
     df = pd.read_csv(fn, header = None, sep = "\t")
     df.columns = ["chrom", "start", "end", "region"]
+    df["chrom"] = df["chrom"].map(format_chrom)
     return(df)
 
 

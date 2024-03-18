@@ -18,7 +18,7 @@ exec(open("./xclone/app.py").read())
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-reqs = ["anndata", "matplotlib", "numpy", "pandas", "scipy", "seaborn"]
+reqs = ["anndata", "intervaltree", "matplotlib", "numpy", "pandas", "scipy", "seaborn"]
 
 setup(
     name='xclone',
