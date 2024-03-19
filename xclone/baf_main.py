@@ -3,7 +3,7 @@
 from sys import stdout, stderr
 from .baf.baf import check_sanity
 
-def run_baf(adata, verbose = True):
+def run_baf(xdata, verbose = True):
     func = "run_baf"
     ret = -1
 
@@ -13,6 +13,6 @@ def run_baf(adata, verbose = True):
     if verbose:
         stdout.write("[I::%s] check sanity ...\n" % func)
 
-    ret, adata = check_sanity(adata, verbose = verbose)
+    ret, xdata = check_sanity(xdata, verbose = verbose)
 
-    return((ret, adata))
+    return((ret, xdata))

@@ -1,19 +1,19 @@
-# adata.py
+# xdata.py
 
 import numpy as np
 import scipy as sp
 from sys import stdout, stderr
 
 
-def check_sanity_layer(adata, layer):
+def check_sanity_layer(xdata, layer):
     func = "check_sanity_layer"
     state = 0
 
     mtx = None
-    if sp.sparse.issparse(adata.layers[layer]):
-        mtx = adata.layers[layer].copy().A
+    if sp.sparse.issparse(xdata.layers[layer]):
+        mtx = xdata.layers[layer].copy().A
     else:
-        mtx = adata.layers[layer].copy()
+        mtx = xdata.layers[layer].copy()
     
     # detect nan Value
     nan_count = np.isnan(mtx).sum()
@@ -29,24 +29,22 @@ def check_sanity_layer(adata, layer):
     return(state)
 
 
-def check_unanno_cells(adata, remove_unanno = True, alt_cell_type = "unannotated", verbose = True):
+def check_unanno_cells(xdata, remove_unanno = True, alt_cell_type = "unannotated", verbose = True):
     func = "check_unanno_cells"
     cell_anno_key = "cell_type"
     if remove_unanno:
-        valid_cells = adata.obs[cell_anno_key] == adata.obs[cell_anno_key]
-        new_adata = adata[valid_cells, :].copy()
+        valid_cells = xdata.obs[cell_anno_key] == xdata.obs[cell_anno_key]
+        new_xdata = xdata[valid_cells, :].copy()
         if verbose:
-            n_cells = adata.shape[0]
+            n_cells = xdata.shape[0]
             stdout.write("[I::%s] filter out %d (out of %d) cells." %
                 (func, n_cells - valid_cells.sum(), n_cells))
     else:
-        new_adata = adata.copy()
-        new_adata.obs[cell_anno_key].fillna(alt_cell_type, inplace = True)
-    return new_adata
+        new_xdata = xdata.copy()
+        new_xdata.obs[cell_anno_key].fillna(alt_cell_type, inplace = True)
+    return new_xdata
 
 
-def remove_XY(adata):
-    flag = ~(adata.var["chrom"].isin(["X", "Y"]))
-    return adata[:, flag].copy()
-
-
+def remove_XY(xdata):
+    flag = ~(xdata.var["chrom"].isin(["X", "Y"]))
+    return xdata[:, flag].copy()
