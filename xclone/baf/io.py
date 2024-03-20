@@ -107,4 +107,3 @@ def load_samples(fn):
 
 def save_samples(df, fn):
     df.to_csv(fn, sep = "\t", header = False, index = False)
-

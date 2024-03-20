@@ -1,29 +1,26 @@
 # baf.py - main functions
 
-from sys import stdout, stderr
+import logging
 from ..utils.xdata import check_sanity_layer, check_unanno_cells
 
 
 def check_sanity(xdata, verbose = True):
-    func = "check_sanity"
     state = 0
     
     if verbose:
-        stdout.write("[I::%s] begin...\n" % func)
+        logging.info("begin ...")
 
     st = check_sanity_layer(xdata, "AD")
     state |= st
 
     if verbose:
-        stdout.write("[I::%s] check sanity of layer AD, state %d.\n" %
-            (func, st))
+        logging.info("check sanity of layer 'AD', state %d." % st)
         
     st = check_sanity_layer(xdata, "DP")
     state |= st
 
     if verbose:
-        stdout.write("[I::%s] check sanity of layer DP, state %d.\n" %
-            (func, st))
+        logging.info("check sanity of layer 'DP', state %d." % st)
         
     xdata = check_unanno_cells(
         xdata, remove_unanno = True, verbose = verbose

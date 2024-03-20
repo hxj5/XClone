@@ -3,7 +3,6 @@
 
 from functools import cmp_to_key
 from intervaltree import IntervalTree
-import numpy as np
 
 
 class RegPos(int):
@@ -255,4 +254,3 @@ REG_MAX_POS = 0x7fffffff    # same with setting of pysam
 
 if __name__ == "__main__":
     pass
-

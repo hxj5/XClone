@@ -1,17 +1,17 @@
 # baf_main.py
 
+import logging
 from sys import stdout, stderr
 from .baf.baf import check_sanity
 
 def run_baf(xdata, verbose = True):
-    func = "run_baf"
     ret = -1
 
     if verbose:
-        stdout.write("[I::%s] begin...\n" % func)
+        logging.info("begin ...")
 
     if verbose:
-        stdout.write("[I::%s] check sanity ...\n" % func)
+        logging.info("check sanity ...")
 
     ret, xdata = check_sanity(xdata, verbose = verbose)
 
