@@ -1,8 +1,10 @@
 # baf.py - main functions
 
+import anndata as ad
 import logging
 import multiprocessing
 import numpy as np
+import pandas as pd
 from scipy import sparse
 
 from .phasing import Local_Phasing, Global_Phasing
@@ -20,6 +22,7 @@ def check_sanity(xdata, verbose = True):
     xdata = check_unanno_cells(
         xdata, remove_unanno = True, verbose = verbose
     )
+
     if verbose:
         logging.info("remove chromosome X and Y ...")
     xdata = remove_XY(xdata)
@@ -47,8 +50,6 @@ def do_local_phasing(
     phasing_len = 100, 
     reg_n_proc = 1,
     bin_n_proc = 1,
-    feature_mode = "gene",  # or "block"
-    var_add = None,
     verbose = False
 ):
     """
@@ -96,6 +97,8 @@ def do_local_phasing(
             result.append(RV_reg)
 
     ## process the data from the list to a dataset
+    AD_phased = theta_bin = bin_idx = bin_idx_lst = None
+    ad_bin_softcnt = ad_bin = dp_bin = allele_flip_local = None
     for i, RV_reg in zip(range(len(result)), result):
         if i == 0:
             AD_phased = RV_reg["AD_phased"]
@@ -115,24 +118,36 @@ def do_local_phasing(
             ad_bin = np.vstack((ad_bin, RV_reg["ad_bin"]))
             dp_bin = np.vstack((dp_bin, RV_reg["dp_bin"]))
             allele_flip_local = np.append(allele_flip_local, RV_reg["allele_flip_local"])
- 
-    update_xdata = None
+
+    RV = {}
+    RV["reg_key"] = reg_key
+    RV["phasing_len"] = phasing_len
+    #RV["AD_phased"] = AD_phased
+    #RV["theta_bin"] = theta_bin
+    #RV["bin_idx"] = bin_idx
+    RV["bin_idx_lst"] = bin_idx_lst
+    RV["ad_bin_softcnt"] = ad_bin_softcnt
+    RV["ad_bin"] = ad_bin
+    RV["dp_bin"] = dp_bin
+    #RV["allele_flip_local"] = allele_flip_local
+
+    new_xdata = None
     if chrom_lst_raw is None:
-        update_xdata = xdata.copy()
+        new_xdata = xdata.copy()
     else:
-        update_xdata = xdata[:, xdata.var[reg_key].isin(chrom_lst_raw)].copy()
-    update_xdata.layers["AD_phased"] = AD_phased.T        # to be cell x region
-    update_xdata.var["bin_idx"] = bin_idx_lst
-    update_xdata.var["allele_flip_local"] = allele_flip_local
+        new_xdata = xdata[:, xdata.var[reg_key].isin(chrom_lst_raw)].copy()
+    new_xdata.layers["AD_phased"] = AD_phased.T        # to be cell x feature
+    new_xdata.var["bin_idx"] = bin_idx_lst
+    new_xdata.var["allele_flip_local"] = allele_flip_local
     try:
-        update_xdata.var["allele_flip_local"].replace({0: False, 1: True}, inplace = True)
+        new_xdata.var["allele_flip_local"].replace({0: False, 1: True}, inplace = True)
     except Exception as e:
         logging.warning(str(e))
     else:
-        logging.info("get allele flip status from local phasing.")  
-    update_xdata.obsm["theta_bin"] = theta_bin.T
+        logging.info("get allele flip status from local phasing.")
+    new_xdata.obsm["theta_bin"] = theta_bin.T
 
-    return update_xdata
+    return new_xdata, RV
 
 
 def do_local_phasing_reg(
@@ -221,17 +236,17 @@ def do_local_phasing_reg(
             allele_flip_local = np.append(allele_flip_local, RV_bin["flip"])
 
     ## resolve results for global phasing input
-    RV_reg = {}
-    RV_reg["AD_phased"] = AD_phased
-    RV_reg["bin_idx"] = bin_idx
-    RV_reg["ad_bin_softcnt"] = ad_bin_softcnt
-    RV_reg["ad_bin"] = ad_bin
-    RV_reg["dp_bin"] = dp_bin
-    RV_reg["theta_bin"] = theta_bin
-    RV_reg["allele_flip_local"] = allele_flip_local
-    RV_reg["bin_idx_lst"] = bin_idx_lst    # for global phasing record
+    RV = {}
+    RV["AD_phased"] = AD_phased
+    RV["bin_idx"] = bin_idx
+    RV["ad_bin_softcnt"] = ad_bin_softcnt
+    RV["ad_bin"] = ad_bin
+    RV["dp_bin"] = dp_bin
+    RV["theta_bin"] = theta_bin
+    RV["allele_flip_local"] = allele_flip_local
+    RV["bin_idx_lst"] = bin_idx_lst    # for global phasing record
 
-    return RV_reg
+    return RV
 
 
 def do_local_phasing_bin(AD, DP, reg_idx, bin_idx, verbose = False):
@@ -267,3 +282,83 @@ def do_local_phasing_bin(AD, DP, reg_idx, bin_idx, verbose = False):
     RV['theta_bin'] = np.array(thetas)[:, 0]
     RV['logLik'] = _logLik_new
     return RV
+
+
+def feature2bin(
+    xdata,
+    stat,
+    feature_mode = "gene",  # or "block"
+    var_add = None,
+    verbose = False
+):
+    # 
+    def get_bin_features(merge_var, group_key = "bin_idx_cum"):
+        feature_lst = []
+        feature_dict = {}
+        groups = merge_var.groupby(group_key).groups
+        for key, idx in groups.items():
+            fet_lst = merge_var.loc[idx]["feature"].copy().tolist()
+            feature_lst.append(fet_lst)
+            feature_dict[key] = fet_lst
+        return feature_lst, feature_dict
+
+    if not feature_mode:
+        raise ValueError
+    if feature_mode.lower() not in ("gene", "block"):
+        raise ValueError
+
+    # calculate and assign the bin_idx_cum for bins across all regions (chromosomes).
+    # originally implemented in the `process_bin_id` function.
+    xv = xdata.var.drop_duplicates(["chrom", "bin_idx"], keep = "first")[["chrom", "bin_idx"]]
+    xv["bin_idx_cum"] = range(xv.shape[0])
+    xdata.var = pd.merge(xdata.var, xv, on = ["chrom", "bin_idx"], how = "left")
+
+    ##check theta_bin reuslts first and there are nan value
+    ## save for visualization
+    ad_bin_softcnt = sparse.csr_matrix(stat["ad_bin_softcnt"])
+    ad_bin = sparse.csr_matrix(stat["ad_bin"])
+    dp_bin = sparse.csr_matrix(stat["dp_bin"])
+
+    ## generate merge_Xdata var
+    merge_var = xdata.var.copy()
+    merge_var.drop_duplicates("bin_idx_cum", keep = "first", inplace = True)
+    merge_var.rename(columns={"end": "feature1_end"}, inplace = True)
+
+    xv = xdata.var.drop_duplicates("bin_idx_cum", keep = "last")
+    merge_var["end"] = xv["end"].copy().tolist()
+    merge_var["bin_end_arm"] = xv["arm"].copy().tolist()
+    merge_var["bin_end_band"] = xv["band"].copy().tolist()
+
+    xv =  xdata.var.copy()
+    feature_lst, feature_dict = get_bin_features(xv, group_key = "bin_idx_cum")
+    merge_var["feature_lst"] = [",".join(x) for x in feature_lst]
+
+    var_keep_lst = [
+        "chrom", "start", "end", "feature", "arm", "band", 
+        "feature1_end", "bin_end_arm", "bin_end_band", 
+        "bin_idx", "bin_idx_cum", 
+        "feature_lst"]
+
+    if var_add:
+        for v in var_add:
+            if v not in var_keep_lst and v in xdata.var.columns:
+                var_keep_lst.append(v)
+
+    merge_var = merge_var[var_keep_lst]
+    merge_var["bin_features_cnt"] = merge_var["feature_lst"].str.len()
+
+    merge_xdata = ad.AnnData(
+        ad_bin.T,
+        obs = xdata.obs.copy(),
+        var = merge_var)
+
+    ## soft phasing
+    merge_xdata.layers["ad_bin_softcnt"] = ad_bin_softcnt.T
+
+    ## hard phasing
+    merge_xdata.layers["ad_bin"] = ad_bin.T
+    merge_xdata.layers["dp_bin"] = dp_bin.T
+
+    merge_xdata.uns["local_phasing_key"] = stat["reg_key"]
+    merge_xdata.uns["local_phasing_len"] = stat["phasing_len"]
+    return merge_xdata
