@@ -44,6 +44,73 @@ def check_sanity(xdata, verbose = True):
     return((state, xdata))
 
 
+def do_global_phasing(xdata, bin_xdata, verbose = False):
+    """
+    TODO
+    - test the function.
+    - get filp status for bins (genes).
+    - add plots for global phasing part (Xlayer = "BAF_globbal_phased" or global_phased = True).
+    """
+    if verbose:
+        logging.info("begin ...")
+
+    ## Global_Phasing
+    is_flips, distances, theta_new = Global_Phasing(xdata.obsm["theta_bin"].T)
+
+    ## apply global phasing method on original AD_phased
+    bin_value_counts = xdata.var["bin_idx_cum"].value_counts()
+    bin_items = xdata.var["bin_idx_cum"].drop_duplicates(keep = "first")
+    
+    ## check is_flips the same length with bin_item
+    if is_flips.shape[0] != bin_items.shape[0]:
+        raise ValueError("length of is_flips (%d) is different from bin_items (%d)." %
+            (is_flips.shape[0], bin_items.shape[0]))
+
+    gene_flip = None
+    for i, bin_id in enumerate(bin_items):
+        if i == 0:
+            gene_flip = np.repeat(is_flips[i], bin_value_counts[bin_id])
+        else:
+            gene_flip = np.append(gene_flip, np.repeat(is_flips[i], bin_value_counts[bin_id]))
+
+    # get gene_flip for AD_Phased
+    AD_phased = xdata.layers["AD_phased"]
+    BD_phased = xdata.layers["DP"] - xdata.layers["AD_phased"]
+    AD_global_phased = AD_phased + 0
+    AD_global_phased[:, gene_flip] = BD_phased[: , gene_flip] + 0
+
+    new_xdata = xdata.copy()
+    new_xdata.layers["AD_global_phased"] = AD_global_phased
+    new_xdata.var["allele_flip_global"] = gene_flip
+
+    if verbose:
+        logging.info("get allele flip status from global phasing.")
+
+    if {'allele_flip_local', 'allele_flip_global'}.issubset(new_xdata.var.columns):
+        new_xdata.var["allele_flip"] =  new_xdata.var["allele_flip_local"] ^ new_xdata.var["allele_flip_global"]
+        logging.info("get final allele flip status.")
+
+    ## apply global phasing method on AD_phased bins
+    ad_bin_softcnt = bin_xdata.layers["ad_bin_softcnt"]
+    ad_bin = bin_xdata.layers["ad_bin"]
+    dp_bin = bin_xdata.layers["dp_bin"]
+    
+    bd_bin_softcnt = dp_bin - ad_bin_softcnt
+    ad_bin_softcnt_phased = ad_bin_softcnt + 0
+    ad_bin_softcnt_phased[: , is_flips] = bd_bin_softcnt[:, is_flips] + 0
+
+    bd_bin = dp_bin - ad_bin
+    ad_bin_phased = ad_bin + 0
+    ad_bin_phased[: , is_flips] = bd_bin[:, is_flips] + 0
+
+    # the `ad_bin_softcnt_phased` is weighted counts(bin counts is weighted)(soft phasing).
+    # `ad_bin_phased`` is hard phasing counts.
+    bin_xdata.layers["ad_bin_softcnt_phased"] = ad_bin_softcnt_phased
+    bin_xdata.layers["ad_bin_phased"] = ad_bin_phased
+    
+    return new_xdata, bin_xdata
+
+
 def do_local_phasing(
     xdata, 
     chrom_lst = None, 
@@ -292,12 +359,12 @@ def feature2bin(
     verbose = False
 ):
     # 
-    def get_bin_features(merge_var, group_key = "bin_idx_cum"):
+    def get_bin_features(bin_var, group_key = "bin_idx_cum"):
         feature_lst = []
         feature_dict = {}
-        groups = merge_var.groupby(group_key).groups
+        groups = bin_var.groupby(group_key).groups
         for key, idx in groups.items():
-            fet_lst = merge_var.loc[idx]["feature"].copy().tolist()
+            fet_lst = bin_var.loc[idx]["feature"].copy().tolist()
             feature_lst.append(fet_lst)
             feature_dict[key] = fet_lst
         return feature_lst, feature_dict
@@ -319,19 +386,19 @@ def feature2bin(
     ad_bin = sparse.csr_matrix(stat["ad_bin"])
     dp_bin = sparse.csr_matrix(stat["dp_bin"])
 
-    ## generate merge_Xdata var
-    merge_var = xdata.var.copy()
-    merge_var.drop_duplicates("bin_idx_cum", keep = "first", inplace = True)
-    merge_var.rename(columns={"end": "feature1_end"}, inplace = True)
+    ## generate bin_xdata var
+    bin_var = xdata.var.copy()
+    bin_var.drop_duplicates("bin_idx_cum", keep = "first", inplace = True)
+    bin_var.rename(columns={"end": "feature1_end"}, inplace = True)
 
     xv = xdata.var.drop_duplicates("bin_idx_cum", keep = "last")
-    merge_var["end"] = xv["end"].copy().tolist()
-    merge_var["bin_end_arm"] = xv["arm"].copy().tolist()
-    merge_var["bin_end_band"] = xv["band"].copy().tolist()
+    bin_var["end"] = xv["end"].copy().tolist()
+    bin_var["bin_end_arm"] = xv["arm"].copy().tolist()
+    bin_var["bin_end_band"] = xv["band"].copy().tolist()
 
     xv =  xdata.var.copy()
     feature_lst, feature_dict = get_bin_features(xv, group_key = "bin_idx_cum")
-    merge_var["feature_lst"] = [",".join(x) for x in feature_lst]
+    bin_var["feature_lst"] = [",".join(x) for x in feature_lst]
 
     var_keep_lst = [
         "chrom", "start", "end", "feature", "arm", "band", 
@@ -344,21 +411,21 @@ def feature2bin(
             if v not in var_keep_lst and v in xdata.var.columns:
                 var_keep_lst.append(v)
 
-    merge_var = merge_var[var_keep_lst]
-    merge_var["bin_features_cnt"] = merge_var["feature_lst"].str.len()
+    bin_var = bin_var[var_keep_lst]
+    bin_var["bin_features_cnt"] = bin_var["feature_lst"].str.len()
 
-    merge_xdata = ad.AnnData(
+    bin_xdata = ad.AnnData(
         ad_bin.T,
         obs = xdata.obs.copy(),
-        var = merge_var)
+        var = bin_var)
 
     ## soft phasing
-    merge_xdata.layers["ad_bin_softcnt"] = ad_bin_softcnt.T
+    bin_xdata.layers["ad_bin_softcnt"] = ad_bin_softcnt.T
 
     ## hard phasing
-    merge_xdata.layers["ad_bin"] = ad_bin.T
-    merge_xdata.layers["dp_bin"] = dp_bin.T
+    bin_xdata.layers["ad_bin"] = ad_bin.T
+    bin_xdata.layers["dp_bin"] = dp_bin.T
 
-    merge_xdata.uns["local_phasing_key"] = stat["reg_key"]
-    merge_xdata.uns["local_phasing_len"] = stat["phasing_len"]
-    return merge_xdata
+    bin_xdata.uns["local_phasing_key"] = stat["reg_key"]
+    bin_xdata.uns["local_phasing_len"] = stat["phasing_len"]
+    return bin_xdata

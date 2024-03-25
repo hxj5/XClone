@@ -2,7 +2,7 @@
 
 import logging
 from sys import stdout, stderr
-from .baf.baf import check_sanity, do_local_phasing, feature2bin
+from .baf.baf import check_sanity, do_local_phasing, feature2bin, do_global_phasing
 
 def run_baf(xdata, verbose = True):
     ret = -1
@@ -43,7 +43,7 @@ def run_baf(xdata, verbose = True):
     if verbose:
         logging.info("merge features into bin ...")
     
-    merge_xdata = feature2bin(
+    bin_xdata = feature2bin(
         xdata = xdata,
         stat = local_stat,
         feature_mode = "gene",
@@ -54,7 +54,22 @@ def run_baf(xdata, verbose = True):
     if verbose:
         logging.debug("xdata after feature2bin:")
         logging.debug(str(xdata))
-        logging.debug("merge_xdata after feature2bin:")
-        logging.debug(str(merge_xdata))
+        logging.debug("bin_xdata after feature2bin:")
+        logging.debug(str(bin_xdata))
 
-    return((ret, xdata))
+    if verbose:
+        logging.info("do global phasing ...")
+
+    xdata, bin_xdata = do_global_phasing(
+        xdata = xdata,
+        bin_xdata = bin_xdata,
+        verbose = verbose
+    )
+
+    if verbose:
+        logging.debug("xdata after do_global_phasing:")
+        logging.debug(str(xdata))
+        logging.debug("bin_xdata after do_global_phasing:")
+        logging.debug(str(bin_xdata))
+
+    return((ret, xdata, bin_xdata))
