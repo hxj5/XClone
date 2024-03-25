@@ -1,4 +1,4 @@
-# baf.py - main functions
+# core.py - core functions
 
 import anndata as ad
 import logging
@@ -7,8 +7,20 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from .bin import cal_cell_BAF, cap_extreme_count
 from .phasing import Local_Phasing, Global_Phasing
 from ..utils.xdata import check_sanity_layer, check_unanno_cells, remove_XY
+
+
+def bin_cal_BAF(xdata, extreme_count_cap = True, verbose = False):
+    if extreme_count_cap:
+        if verbose:
+            logging.info("cap extreme counts ...")
+        xdata = cap_extreme_count(xdata, verbose = verbose)
+    xdata = cal_cell_BAF(xdata, AD_key = "ad_bin", DP_key = "dp_bin", BAF_key = "BAF")
+    xdata = cal_cell_BAF(xdata, AD_key = "ad_bin_phased", DP_key = "dp_bin", BAF_key = "BAF_phased")
+    #xclone.model.BAF_fillna(merge_Xdata, Xlayer = "BAF_phased", out_layer = "fill_BAF_phased")
+    return(xdata)
 
 
 def check_sanity(xdata, verbose = True):

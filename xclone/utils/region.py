@@ -1,4 +1,4 @@
-# Region routine
+# region.py - genomic region routine
 # Author: Xianjie Huang
 
 from functools import cmp_to_key

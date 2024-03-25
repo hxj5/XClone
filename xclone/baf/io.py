@@ -7,7 +7,7 @@ import scipy as sp
 from scipy import io
 from scipy import sparse
 
-from ..blib.region import format_chrom
+from ..utils.region import format_chrom
 
 
 def load_xcltk_data(data_dir, cell_anno_fn = None, feature_anno_fn = None, ref_cell_types = None):

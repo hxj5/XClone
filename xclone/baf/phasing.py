@@ -3,6 +3,8 @@
 # Author: Yuanhua Huang
 # Date: 12/11/2020
 
+# Modified by Xianjie Huang, 2024-03-21.
+
 import logging
 import numpy as np
 from scipy.special import logsumexp
